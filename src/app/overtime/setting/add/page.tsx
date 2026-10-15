@@ -1,8 +1,6 @@
 "use client";
 import {
-  governmentFormula,
   overtimecategory,
-  overtimeType,
 } from "@/components/dummy/overtimeData";
 import Sidebar from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
@@ -18,82 +16,95 @@ import {
 } from "@/components/ui/select";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Textarea } from "@/components/ui/textarea";
+import Cookies from "js-cookie";
+import { toast, Toaster } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
 
 export default function AddOvertimeSetting() {
   
   const router = useRouter();
-  const [selectedType, setSelectedType] = useState("");
+  const [overtimeName, setOvertimeName] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [calculation, setCalculation] = useState<number | null>(null); 
   const [rate, setRate] = useState<number | null>(null); 
-  const [workWeekDuration, setWorkWeekDuration] = useState<number | null>(null); 
-  const [formulaText, setFormulaText] = useState("");
+  const [loading, setLoading] = useState(false);
+  
+  const handleSubmit = async () => {
+    setLoading(true);
+    // setError(false);
+    // setSuccess(false);
 
-  const handleSubmit = () => {
-    //idonow
-    // const payload = {
-    //   overtimeName,
-    //   type: selectedType,
-    //   category: selectedCategory,
-    //   calculation,
-    //   rate,
-    //   workWeekDuration,
-    //   formulaText,
-    //   employeeId: selectedEmployeeId,
-    //   overtimeId: selectedOvertimeName,
-    //   date: selectedDate,
-    //   totalHours: inputTotalHour,
-    //   overtimePay: calculatedPay,
-    // };
+    console.log(overtimeName)
+    console.log(selectedCategory)
+    console.log(calculation)
+    console.log(rate)
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/overtime-settings`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${Cookies.get("token")}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            name: overtimeName,
+            category: selectedCategory,
+            interval_hours: calculation,
+            rate: rate
 
-    // console.log("Data yang dikirim:", payload);
+      })
+    });
 
-    // Contoh fetch untuk POST data
-    // fetch('/api/overtime', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(payload),
-    // }).then(() => {
-    //   router.push("/overtime/setting");
-    // });
 
-    // Untuk sementara redirect setelah submit:
-    router.push("/overtime/setting");
-  };
+    const responseData = await response.json();
+    if (!response.ok) {
+        throw responseData; 
+    }
+    toast.success('Overtime created successfully')
+    // setSuccess(true);
+    router.push("/overtime/setting")
+    } catch (err) {
+    // setError(true);
+    let message = "Unknown error occurred";
+    let messagesToShow: string[] = [];
 
-  // for government regulation formula filtered by work week duration and category
-  useEffect(() => {
-    if (!selectedCategory) {
-      setFormulaText("");
-      return;
+    if (
+    err &&
+    typeof err === "object" &&
+    "message" in err &&
+    typeof (err as any).message === "string"
+    ) {
+    const backendError = err as { message: string; errors?: Record<string, string[]> };
+
+    if (backendError.message.toLowerCase().includes("failed to fetch")) {
+        message = "Unknown error occurred";
+    } else {
+        message = backendError.message;
     }
 
-    const filteredFormula = governmentFormula.filter(
-      (item) =>
-        item.category === selectedCategory &&
-        (item.work_week_duration === null ||
-          item.work_week_duration === workWeekDuration)
+    messagesToShow = backendError.errors
+        ? Object.values(backendError.errors).flat()
+        : [message];
+    } else {
+    messagesToShow = [message]
+    }
+
+    toast.error(
+        <>
+            <p className="text-red-700 font-bold">Error</p>
+            {messagesToShow.map((msg, idx) => (
+            <div key={idx} className="text-red-700">• {msg}</div>
+            ))}
+        </>,
+        { duration: 30000 }
     );
-
-    const result = filteredFormula
-      .map((item) => {
-        const hourRange =
-          item.from_hour === item.to_hour
-            ? `${item.from_hour} hour`
-            : `${item.from_hour}–${item.to_hour} hour`;
-        return `${hourRange} = ${item.multiplier} x ( monthly salary / 173))`;
-      })
-      .join("\n");
-
-    setFormulaText(result);
-  }, [selectedCategory, workWeekDuration]);
+    } finally {
+    setLoading(false);
+    }
+  }
   
-
   return (
     <Sidebar title="Overtime Setting">
+      <Toaster position="bottom-right" expand={true} richColors closeButton></Toaster>
       <Card className="flex flex-col gap-[15px] px-[20px] py-[26px]">
         <div className="px-[10px]">
           <p className="font-medium text-lg text-neutral-900">
@@ -113,24 +124,9 @@ export default function AddOvertimeSetting() {
                 name="ovt_name"
                 placeholder="Enter overtime name"
                 required
+                value={overtimeName}
+                onChange={(e) => setOvertimeName(e.target.value)}
               />
-            </div>
-
-            {/* overtime type */}
-            <div className="flex flex-col w-full gap-[15px]">
-              <Label>Overtime Setting Type</Label>
-              <RadioGroup
-                value={selectedType}
-                className="flex flex-col gap-5"
-                onValueChange={(val) => setSelectedType(val)}
-              >
-                {overtimeType.map((item) => (
-                  <div key={item.id} className="flex items-center space-x-2">
-                    <RadioGroupItem value={item.name} id={`radio-${item.id}`} />
-                    <Label htmlFor={`radio-${item.id}`}>{item.name}</Label>
-                  </div>
-                ))}
-              </RadioGroup>
             </div>
 
             {/* overtime category */}
@@ -156,110 +152,60 @@ export default function AddOvertimeSetting() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
-          {/* if ovettime type is flat, user can custom the overtime calculation and rate */}
-          {selectedType === "Flat" && (
-            <div className="gap-[30px] flex flex-col">
-              {/* overtime calculation */}
-              <div className="flex flex-col w-full gap-2">
-                <Label>Overtime Calculation</Label>
-                <div className="flex flex-row gap-2 ">
-                  <Input
-                    disabled
-                    type="text"
-                    value="per"
-                    className="bg-neutral-100 text-neutral-900 text-center"
-                  />
-                  <Input
-                    type="number"
-                    id="ovt_cal"
-                    name="ovt_cal"
-                    value={calculation || ""}
-                    onChange={(e) => setCalculation(Number(e.target.value))}
-                    placeholder="Ex: '1' or '0.5'"
-                    required
-                  />
-                  <Input
-                    disabled
-                    type="text"
-                    value="hour"
-                    className="bg-neutral-100 text-neutral-900 text-center"
-                  />
-                </div>
-              </div>
-
-              {/* overtime rate */}
-              <div className="flex flex-col w-full gap-2">
-                <Label>Overtime Rate</Label>
+            {/* overtime calculation */}
+            <div className="flex flex-col w-full gap-2">
+              <Label>Overtime Calculation</Label>
+              <div className="flex flex-row gap-2 ">
+                <Input
+                  disabled
+                  type="text"
+                  value="per"
+                  className="bg-neutral-100 text-neutral-900 text-center"
+                />
                 <Input
                   type="number"
-                  id="ovt_rate"
-                  name="ovt_rate"
-                  value={rate || ""}
-                  onChange={(e) => setRate(Number(e.target.value))}
-                  placeholder="Ex: '200000'"
+                  id="ovt_cal"
+                  name="ovt_cal"
+                  value={calculation || ""}
+                  onChange={(e) => setCalculation(Number(e.target.value))}
+                  placeholder="Ex: '1' or '0.5'"
                   required
                 />
-              </div>
-
-              {/* overtime formula */}
-              <div className="flex flex-col w-full gap-2">
-                <Label>Formula</Label>
                 <Input
+                  disabled
                   type="text"
-                  id="ovt_formula"
-                  name="ovt_formula"
-                  value={
-                    calculation && rate
-                      ? `${calculation} hour x IDR ${rate}`
-                      : ""
-                  }
-                  disabled
-                  className="bg-neutral-100 text-neutral-900"
+                  value="hour"
+                  className="bg-neutral-100 text-neutral-900 text-center"
                 />
               </div>
             </div>
-          )}
 
-          {/* if type is goverment regulation we must know in 5 days work or 6 */}
-          {selectedType === "Government Regulation" &&
-            selectedCategory === "Holiday" &&
-            !!selectedCategory && (
-              <div className="flex flex-col w-full gap-[15px]">
-                {/* weekly work days */}
-                <Label>Weekly Work Days</Label>
-                <RadioGroup
-                  value={workWeekDuration?.toString() || ""}
-                  onValueChange={(val) => setWorkWeekDuration(Number(val))}
-                  className="flex flex-col gap-5"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="5" id="5" />
-                    <Label htmlFor="5">5 days in a week</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="6" id="6" />
-                    <Label htmlFor="6">6 days in a week</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-            )}
-
-          {selectedType === "Government Regulation" && (
-            <div className="gap-[30px] flex flex-col">
-              <div className="flex flex-col w-full gap-2 ">
-                <Label>Formula</Label>
-                <Textarea
-                  id="ovt_formula"
-                  name="ovt_formula"
-                  value={formulaText}
-                  disabled
-                  className="bg-neutral-100 text-neutral-900 whitespace-pre-line"
-                />
-              </div>
+            {/* overtime rate */}
+            <div className="flex flex-col w-full gap-2">
+              <Label>Overtime Rate</Label>
+              <Input
+                type="number"
+                id="ovt_rate"
+                name="ovt_rate"
+                value={rate || ""}
+                onChange={(e) => setRate(Number(e.target.value))}
+                placeholder="Ex: '200000'"
+                required
+              />
             </div>
-          )}
+
+            {/* overtime formula */}
+           <div className="flex flex-col w-full gap-2">
+              <Label>Payroll information</Label>
+              <p className="flex w-full min-w-0 rounded-md border border-neutral-300 px-4 py-3 text-base md:text-sm shadow-xs bg-white text-neutral-900">
+                {calculation && rate
+                  ? `Employees must work at least 2 hours of overtime, and will receive IDR ${Number(rate).toLocaleString("id-ID")} for every ${calculation} hours of overtime worked`
+                  : "-"}
+              </p>
+            </div>
+
+          </div>
         </Card>
 
         {/* Action Buttons */}
@@ -268,54 +214,40 @@ export default function AddOvertimeSetting() {
             variant="outline"
             className="w-[98px]"
             onClick={() => router.push("/overtime/setting")}
+            disabled={loading}
           >
-            Cancel
+            {!loading ? (
+              <>
+              <span>Cancel</span>
+              </>
+            ) : (
+              <Spinner size="small" />
+          )}
           </Button>
-          <Button type="submit" variant="default" className="w-[98px]" onClick={handleSubmit}>
+          {/* <Button
+            type="submit"
+            variant="default"
+            className="w-[98px]"
+            onClick={handleSubmit}
+          >
             Save
+          </Button> */}
+          <Button className="w-[80px] h-[40px]" variant="default"  onClick={handleSubmit} disabled={loading}>
+          {!loading ? (
+              <>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H16L21 8V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M17 21V13H7V21" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M7 3V8H15" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span className="ml-1">Save</span>
+              </>
+          ) : (
+              <Spinner size="small" />
+          )}
           </Button>
         </div>
       </Card>
     </Sidebar>
   );
-}
-
-{
-  /* {selectedType === "Company Regulation" && (
-  <div className="flex flex-col gap-[30px]">
-    <div className="flex flex-col gap-[15px]">
-      <Label>Choose Formula Type</Label>
-      <RadioGroup
-        value={selectedFormula}
-        onValueChange={(val) => setSelectedFormula(val)}
-        className="flex flex-col gap-5"
-      >
-        <div className="flex items-center space-x-2">
-          <RadioGroupItem value="f1" id="default" />
-          <Label htmlFor="default">Formula 1</Label>
-        </div>
-        <div className="flex items-center space-x-2">
-          <RadioGroupItem value="f2" id="default" />
-          <Label htmlFor="default">Formula 2</Label>
-        </div>
-        <div className="flex items-center space-x-2">
-          <RadioGroupItem value="custom" id="custom" />
-          <Label htmlFor="custom">Custom Formula</Label>
-        </div>
-      </RadioGroup>
-    </div>
-    {selectedFormula === "custom" && (
-      <div className="flex flex-col w-full gap-2">
-        <Label>Custom Formula</Label>
-        <Input
-          type="text"
-          id="custom_formula"
-          name="custom_formula"
-          placeholder="Enter custom formula"
-          required
-        />
-      </div>
-    )}
-  </div>
-)} */
 }

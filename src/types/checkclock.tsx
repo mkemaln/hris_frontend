@@ -1,0 +1,24 @@
+export type CheckclockResponse = {
+  data_id: string;
+  submitter_name: string;
+  employee_number: string;
+  employee_id: number;
+  employee_name: string;
+  position: string;
+  date: string;
+  clock_in: string | null;
+  clock_out: string | null;
+  work_type: "WFO" | "WFA";
+  status: string;
+  approval_status: string;
+  latitude?: number;
+  longitude?: number;
+  absent_start_date: string | null;
+  absent_end_date: string | null;
+  reject_reason: string | null;
+  present_evidence: string | null;
+  present_evidence_url: string | null;
+  absent_evidence: string | null;
+  absent_evidence_url: string | null;
+  employee_photo_url: string | null;
+};

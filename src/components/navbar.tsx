@@ -1,6 +1,7 @@
 
 "use client";
 
+import { useEffect, useState } from "react";
 import { Button } from "./ui/button";
 import SearchBar from "./ui/search";
 import {
@@ -11,19 +12,47 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-
+import { usePathname, useRouter } from "next/navigation";
 import Cookies from "js-cookie";
+import { toast } from "sonner";
+import { formatDistanceToNow } from 'date-fns';
 
 interface NavbarProps {
   title: string; 
-  avatarImage?: string;
-  userName: string;
-  subsPlan: string;
-  activePeriod: string;
-}
-
-export default function Navbar({ title, avatarImage, userName, subsPlan, activePeriod }: NavbarProps) {
+  // avatarImage?: string;
+  // userName: string;
+  // role: string;
+  // plan: string;
+  // period: string;
+  // deadline?: string | null;
   
+}
+type Notification = {
+  id: string;
+  message: string;
+  url: string;
+  created_at: string;
+  read_at: string | null;
+};
+
+function formatTimeAgo(dateString: string) {
+  return formatDistanceToNow(new Date(dateString), { addSuffix: true });
+}
+// export default function Navbar({ title, avatarImage, userName, role, plan, period, deadline }: NavbarProps) {
+export default function Navbar({ title }: NavbarProps) {
+  const [imageValid, setImageValid] = useState(true);
+  const [avatarImage, setAvatarImage] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [company, setCompany] = useState<string | null>(null);
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [plan, setPlan] = useState<string | null>(null);
+  const [period, setPeriod] = useState<string | null>(null);
+  const [deadline, setDeadline] = useState<string | null>(null);
+
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
   // Fungsi untuk mengambil inisial dari nama pengguna
   const getInitials = (name: string) => {
     const nameParts = name.split(" ");
@@ -33,37 +62,153 @@ export default function Navbar({ title, avatarImage, userName, subsPlan, activeP
   };
 
   //sugestion searchbar
-  const suggestion = ['Dashboard', 'Profile', 'Settings', 'Logout'];
-  const result = ['Article 1', 'Product A', 'Blog Post', 'Item XYZ'];
+const result = [
+  { label: 'Dashboard', path: '/dashboard' },
+  { label: 'Employee', path: '/employee' },
+  { label: 'Add Employee', path: '/employee/add' },
+  { label: 'Checkclock', path: '/checkclock/management' },
+  { label: 'Add Checkclock', path: '/checkclock/management/add' },
+  { label: 'Checkclock Setting', path: '/checkclock/setting' },
+  { label: 'Overtime', path: '/overtime/management' },
+  { label: 'Add Overtime', path: '/overtime/management/add' },
+  { label: 'Overtime Setting', path: '/overtime/setting' },
+  { label: 'Bills', path: '/bills' },
+  { label: 'Profile', path: '/settings/profile' },
+  { label: 'Plan', path: '/settings/plan' },
+];
 
-  // array notification sample
-  const notifications = [
-    { user: "Silfi Nazarina", message: "Has sent a checkclock request", type: "checkclock", time: "1 minute ago" },
-    { user: "Silfi Nazarina", message: "Has sent a checkclock request", type: "checkclock", time: "1 minute ago" },
-    { user: "Silfi Nazarina", message: "Has sent a checkclock request", type: "checkclock", time: "1 minute ago" },
-    { user: "Silfi Nazarina", message: "Has sent a checkclock request", type: "checkclock", time: "1 minute ago" },
-    { user: "Silfi Nazarina", message: "Has sent a checkclock request", type: "checkclock", time: "1 minute ago" },
-  ];
+  const router = useRouter();
+  const pathname = usePathname();
   
-  const notificationCount = notifications.length;
+  useEffect(() => {
+    const token = Cookies.get('token');
 
+    const fetchUser = async () => {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/getUser`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
+      const data = await res.json();
+
+      if (res.status === 403 || res.status === 401) {
+        Cookies.remove('token');
+        if (pathname !== '/' && pathname !== '/sign-up' && pathname !== '/sign-in/as-employee') {
+          router.replace('/sign-in');
+        }
+        return;
+      }
+
+      if (!data.is_profile_complete && pathname !== '/sign-up/complete-registration') {
+        router.replace('/sign-up/complete-registration');
+        return;
+      }
+
+      if (!res.ok) throw data;
+
+      // Set data user
+      setAvatarImage(data.photo_url);
+      setUserName(data.full_name);
+      setRole(data.user_role);
+      setCompany(data.company_name);
+      setCompanyId(data.company_id);
+      setPlan(data.plan_name);
+      setPeriod(data.bill_period);
+      setDeadline(String(data.bill_deadline));
+    };
+
+    const fetchNotifications = async () => {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/notifications`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) return;
+
+      const data = await res.json();
+      setNotifications(data.notifications);
+      setUnreadCount(data.unread_count);
+    };
+
+    // Panggil kedua fungsi
+    fetchUser();
+    fetchNotifications();
+  }, []);
+
+  
+  const handleLogout = async () => {
+    try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/logout`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${Cookies.get("token")}`,
+                    // Jangan tambahkan Content-Type manual di sini!
+                },
+        });
+
+        const responseData = await response.json();
+
+        if (!response.ok) {
+            throw responseData; 
+        }
+        Cookies.remove("token");
+        router.replace("/sign-in");
+    } catch (err) {
+        let message = "Unknown error occurred";
+        let messagesToShow: string[] = [];
+
+        if (
+        err &&
+        typeof err === "object" &&
+        "message" in err &&
+        typeof (err as any).message === "string"
+        ) {
+        const backendError = err as { message: string; errors?: Record<string, string[]> };
+
+        if (backendError.message.toLowerCase().includes("failed to fetch")) {
+            message = "Unknown error occurred";
+        } else {
+            message = backendError.message;
+        }
+
+        messagesToShow = backendError.errors
+            ? Object.values(backendError.errors).flat()
+            : [message];
+        } else {
+        messagesToShow = [message]
+        }
+
+        toast.error(
+            <>
+                <p className="text-red-700 font-bold">Error</p>
+                {messagesToShow.map((msg, idx) => (
+                <div key={idx} className="text-red-700">• {msg}</div>
+                ))}
+            </>,
+            { duration: 30000 }
+        );
+    } finally {
+
+    }
+  };
   return (
-    <nav className="sticky z-10 top-0 flex-row items-center h-auto bg-white px-6 py-[16px] justify-between shadow-[0px_2px_4px_#B0B0B0] grid grid-cols-3">
+    <nav id="navbar" className="sticky z-10 top-0 flex-row items-center h-auto bg-white px-6 py-[16px] justify-between shadow-[0px_2px_4px_#B0B0B0] grid grid-cols-3">
       <div className="flex w-full justify-start h-[29px]">
         <a href="#" className="text-2xl font-medium focus:outline-nonext-left">
           {title}
         </a>
       </div>
-      <div className="flex flex-row items-center justify-center w-full h-[36px] gap-[12px] relative">
-        <SearchBar suggestion={suggestion} results={result} />
+      <div className="flex flex-row items-center justify-center w-full h-[36px] gap-[12px] relative" id="nav-search-bar">
+        <SearchBar results={result} />
       </div>
 
     {/* notification */}
-      <div className="flex flex-row gap-[24px] w-auto h-auto justify-end">
+      <div className="flex flex-row gap-[24px] max-w-[450px] min-w-[300px] h-auto justify-end "  >
         <DropdownMenu>
         <DropdownMenuTrigger>
-        <div className="relative flex items-center">
+        <div className="relative flex items-center" id="notification">
           <div className="relative ">
             <a href="#">
               <svg
@@ -88,9 +233,9 @@ export default function Navbar({ title, avatarImage, userName, subsPlan, activeP
                 />
               </svg>
             </a>
-            {notificationCount > 0 && (
+            {unreadCount > 0 && (
               <span className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 inline-flex items-center justify-center w-[16px] h-[16px] bg-red-600 text-white text-xs rounded-full">
-                {notificationCount}
+                {unreadCount}
               </span>
             )}
           </div>
@@ -99,112 +244,43 @@ export default function Navbar({ title, avatarImage, userName, subsPlan, activeP
         <DropdownMenuContent className="absolute w-[300px] p-0 top-3 right-0">
         <DropdownMenuLabel className="bg-neutral-50 text-neutral-900 h-[42px] px-4 py-[10px] text-base items-center">Notification</DropdownMenuLabel>
           <DropdownMenuSeparator className="m-0"/>
-          <DropdownMenuItem className="h-[91px]">
-            <div className="flex items-center flex-row gap-[10px] w-auto h-[91px] py-3">
-              {/* weight avatarnya gj ding */}
-              <div className="w-13">
-              <div className="relative flex items-center justify-center w-full h-10 bg-gray-400 rounded-full">
-                {avatarImage ? (
-                  <img src={avatarImage} alt="Avatar" className="w-full h-full object-cover rounded-full" />
-                ) : (
-                  <span className="text-white text-sm font-medium">{getInitials(userName)}</span>
-                )}
-              </div>
-              </div>
-              <div className="flex flex-col gap-[2px] h-auto w-full">
-                <div className="flex flex-col">
-                  <span className="text-base font-medium text-neutral-950">
-                    {userName}
+          {notifications.map((notif) => (
+            <DropdownMenuItem key={notif.id} className="h-[91px]"
+            onClick={async () => {
+                try {
+                  const token = Cookies.get("token");
+
+                  // Tandai sebagai sudah dibaca di backend
+                  await fetch(`${process.env.NEXT_PUBLIC_API_URL}/notifications/read/${notif.id}`, {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                    },
+                  });
+
+                  // Redirect setelah sukses
+                  router.push(notif.url);
+                } catch (error) {
+                  console.error("Failed to mark as read", error);
+                  router.push(notif.url); // Tetap redirect meskipun gagal
+                }
+              }}
+            >
+              <div className="flex items-center flex-row gap-[10px] w-auto h-[91px] py-3">
+                <div className="flex flex-col gap-[2px] h-auto w-full">
+                  <div className="flex flex-col">
+                    <span className="text-base font-medium text-neutral-950">
+                      {notif.message}
+                    </span>
+                  </div>
+                  <span className="text-sm text-info-500">
+                    {formatTimeAgo(notif.created_at)}
                   </span>
-                  <span className="text-sm text-neutral-500">Has sent a checkclock request</span>
                 </div>
-                <span className="text-sm text-info-500">1 minute ago</span>
               </div>
-            </div>
-          </DropdownMenuItem>
-          <DropdownMenuItem className="h-[91px]">
-            <div className="flex items-center flex-row gap-2.5 w-auto h-[91px] py-3">
-              {/* weight avatarnya gj ding */}
-              <div className="flex -space-x-7 overflow-hidden">
-              <div className="relative flex items-center justify-center w-13 h-10 bg-gray-400 rounded-full ring-2 ring-white">
-                {avatarImage ? (
-                  <img src={avatarImage} alt="Avatar" className="w-full h-full object-cover rounded-full" />
-                ) : (
-                  <span className="text-white text-sm font-medium">{getInitials(userName)}</span>
-                )}
-              </div>
-              <div className="relative flex items-center justify-center w-13 h-10 bg-gray-400 rounded-full ring-2 ring-white">
-                {avatarImage ? (
-                  <img src={avatarImage} alt="Avatar" className="w-full h-full object-cover rounded-full" />
-                ) : (
-                  <span className="text-white text-sm font-medium">{getInitials(userName)}</span>
-                )}
-              </div>
-              </div>
-              <div className="flex flex-col gap-[2px] h-auto w-full">
-                <div className="flex flex-col">
-                  <span className="text-base font-medium text-neutral-950">
-                    {userName} + 10 others
-                  </span>
-                  <span className="text-sm text-neutral-500">Has sent a checkclock request</span>
-                </div>
-                <span className="text-sm text-info-500">1 minute ago</span>
-              </div>
-            </div>
-          </DropdownMenuItem>
-          <DropdownMenuItem className="h-[91px]">
-            <div className="flex items-center flex-row gap-2.5 w-auto h-[91px] py-3">
-              {/* weight avatarnya gj ding */}
-              <div className="w-13">
-              <div className="relative flex items-center justify-center w-full h-10 bg-gray-400 rounded-full">
-                {avatarImage ? (
-                  <img src={avatarImage} alt="Avatar" className="w-full h-full object-cover rounded-full" />
-                ) : (
-                  <span className="text-white text-sm font-medium">{getInitials(userName)}</span>
-                )}
-              </div>
-              </div>
-              <div className="flex flex-col gap-[2px] h-auto w-full">
-                <div className="flex flex-col">
-                  <span className="text-base font-medium text-neutral-950">
-                    {userName}
-                  </span>
-                  <span className="text-sm text-neutral-500">Has sent a overtime request</span>
-                </div>
-                <span className="text-sm text-info-500">1 minute ago</span>
-              </div>
-            </div>
-          </DropdownMenuItem>
-          <DropdownMenuItem className="h-[91px]">
-            <div className="flex items-center flex-row gap-2.5 w-auto h-[91px] py-3">
-              {/* weight avatarnya gj ding */}
-              <div className="flex -space-x-6 overflow-hidden">
-              <div className="relative flex items-center justify-center w-13 h-10 bg-gray-400 rounded-full ring-2 ring-white">
-                {avatarImage ? (
-                  <img src={avatarImage} alt="Avatar" className="w-full h-full object-cover rounded-full" />
-                ) : (
-                  <span className="text-white text-sm font-medium">{getInitials(userName)}</span>
-                )}
-              </div>
-              <div className="relative flex items-center justify-center w-13 h-10 bg-gray-400 rounded-full ring-2 ring-white">
-                {avatarImage ? (
-                  <img src={avatarImage} alt="Avatar" className="w-full h-full object-cover rounded-full" />
-                ) : (
-                  <span className="text-white text-sm font-medium">{getInitials(userName)}</span>
-                )}
-              </div>
-              </div>
-              <div className="flex flex-col gap-[2px] h-auto w-full">
-                <div className="flex flex-col">
-                  <span className="text-base font-medium text-neutral-950">
-                    {userName} + 10 others
-                  </span>
-                  <span className="text-sm text-neutral-500">Has sent a overtime request</span>
-                </div>
-                <span className="text-sm text-info-500">1 minute ago</span>
-              </div>
-            </div>
-          </DropdownMenuItem>
+            </DropdownMenuItem>
+          ))}
+
           <DropdownMenuLabel className="bg-neutral-50 text-neutral-900 h-[42px] px-[10px] py-[10px] text-base items-center">
             <div className="flex justify-center gap-[10px]">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -245,19 +321,29 @@ export default function Navbar({ title, avatarImage, userName, subsPlan, activeP
           {/* user dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger>
-              <div className="flex flex-row gap-3 w-full h-full rounded-full cursor-pointer transition duration-15 hover:bg-gray-100">
+              <div className="flex flex-row gap-3 w-full h-full rounded-full cursor-pointer transition duration-15 hover:bg-gray-100" id="profile">
                 <div className="relative flex items-center justify-center w-10 h-10 bg-gray-400 rounded-full">
-                  {avatarImage ? (
-                    <img src={avatarImage} alt="Avatar" className="w-full h-full object-cover rounded-full" />
+                  {avatarImage && imageValid ? (
+                    <img src={avatarImage} alt="Avatar" className="w-full h-full object-cover rounded-full" onError={() => setImageValid(false)}/>
                   ) : (
-                    <span className="text-white text-sm font-medium">{getInitials(userName)}</span>
+                     <svg width="78" height="78" viewBox="0 0 78 78" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="78" height="78" rx="39" fill="#F3F4F6" />
+                        <mask id="mask0_462_2363" maskUnits="userSpaceOnUse" x="0" y="16" width="78" height="62" mask-type="alpha">
+                            <path d="M78 68.2272V78H0V68.263C4.53684 62.1999 10.4257 57.2791 17.1983 53.8916C23.9709 50.5042 31.4405 48.7436 39.013 48.75C54.951 48.75 69.108 56.4005 78 68.2272V68.2272ZM52.0065 29.2467C52.0065 32.6945 50.6369 36.0011 48.1989 38.4391C45.7609 40.8771 42.4543 42.2467 39.0065 42.2467C35.5587 42.2467 32.2521 40.8771 29.8141 38.4391C27.3761 36.0011 26.0065 32.6945 26.0065 29.2467C26.0065 25.7989 27.3761 22.4923 29.8141 20.0543C32.2521 17.6163 35.5587 16.2467 39.0065 16.2467C42.4543 16.2467 45.7609 17.6163 48.1989 20.0543C50.6369 22.4923 52.0065 25.7989 52.0065 29.2467V29.2467Z" fill="black"/>
+                        </mask>
+                        <g mask="url(#mask0_462_2363)">
+                            <rect width="78" height="78" rx="39" fill="#D1D5DB" />
+                        </g>
+                      </svg>
                   )}
                 </div>
                 <div className="flex flex-col h-auto w-auto">
                   <span className="text-base font-medium text-neutral-950">
-                    {userName}
+                    {userName !== null && userName.length > 20
+                    ? `${userName.slice(0, 20)}...`
+                    : userName}
                   </span>
-                  <span className="text-sm text-start ext-neutral-500">Roles User</span>
+                  <span className="text-sm text-start ext-neutral-500">{role}</span>
                 </div>
               </div>
             </DropdownMenuTrigger>
@@ -265,35 +351,61 @@ export default function Navbar({ title, avatarImage, userName, subsPlan, activeP
                 <DropdownMenuLabel>
                   <div className="flex justify-center items-center flex-col w-auto gap-2">
                   <div className="relative flex items-center justify-center w-15 h-15 bg-gray-400 rounded-full">
-                    {avatarImage ? (
-                      <img src={avatarImage} alt="Avatar" className="w-full h-full object-cover rounded-full" />
+                    {avatarImage && imageValid ? (
+                      <img src={avatarImage} alt="Avatar" className="w-full h-full object-cover rounded-full" onError={() => setImageValid(false)}/>
                     ) : (
-                      <span className="text-white text-sm font-medium">{getInitials(userName)}</span>
+                       <svg width="78" height="78" viewBox="0 0 78 78" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <rect width="78" height="78" rx="39" fill="#F3F4F6" />
+                          <mask id="mask0_462_2363" maskUnits="userSpaceOnUse" x="0" y="16" width="78" height="62" mask-type="alpha">
+                              <path d="M78 68.2272V78H0V68.263C4.53684 62.1999 10.4257 57.2791 17.1983 53.8916C23.9709 50.5042 31.4405 48.7436 39.013 48.75C54.951 48.75 69.108 56.4005 78 68.2272V68.2272ZM52.0065 29.2467C52.0065 32.6945 50.6369 36.0011 48.1989 38.4391C45.7609 40.8771 42.4543 42.2467 39.0065 42.2467C35.5587 42.2467 32.2521 40.8771 29.8141 38.4391C27.3761 36.0011 26.0065 32.6945 26.0065 29.2467C26.0065 25.7989 27.3761 22.4923 29.8141 20.0543C32.2521 17.6163 35.5587 16.2467 39.0065 16.2467C42.4543 16.2467 45.7609 17.6163 48.1989 20.0543C50.6369 22.4923 52.0065 25.7989 52.0065 29.2467V29.2467Z" fill="black"/>
+                          </mask>
+                          <g mask="url(#mask0_462_2363)">
+                              <rect width="78" height="78" rx="39" fill="#D1D5DB" />
+                          </g>
+                        </svg>
                     )}
                   </div>
                   <div className="flex flex-col items-center">
-                      <span className="text-base font-medium text-neutral-900">
+                      <span className="text-base font-medium text-neutral-900 text-center">
                         Hello, {userName}
                       </span>
-                      <span className="text-sm text-neutral-500">Roles User</span>
+                      <span className="text-sm text-neutral-500">{role}</span>
                   </div>
-                  <div className="flex flex-col">
+                  <div className="flex flex-col justify-start items-start w-full gap-1">
+                    <div className="flex flex-row">
+                      <span className="font-medium text-neutral-900">Company ID:&nbsp;</span>{" "}
+                      <span className="text-neutral-500"> {companyId}</span>
+                    </div>
+                    <div className="flex flex-row">
+                      <span className="font-medium text-neutral-900">Company:&nbsp;</span>{" "}
+                      <span className="text-neutral-500"> {company}</span>
+                    </div>
                     <div className="flex flex-row">
                       <span className="font-medium text-neutral-900">Plan:&nbsp;</span>{" "}
-                      <span className="text-neutral-500"> {subsPlan}</span>
+                      <span className="text-neutral-500"> {plan}</span>
                     </div>
                     <div className="flex flex-row w-auto">
                       <span className="font-medium text-neutral-900">Active Until:&nbsp;</span>
-                      <span className="text-neutral-500"> {activePeriod}</span>
+                      <span className="text-neutral-500"> {period}</span>
                     </div>
-                    <Button className="mt-2">Upgrade</Button>
+                   {deadline && deadline !== "null" && deadline !== "undefined" && (
+                      <div className="flex flex-row w-auto">
+                        <span className="font-extrabold text-danger-600">Pay Bill Before:&nbsp;</span>
+                        <span className="text-danger-600 font-extralight">{deadline}</span>
+                      </div>
+                    )}
+
+                  
+                    <Button onClick={() => (window.location.href = "/bills")} className="mt-2">Pay Bill</Button>
                   </div>
                 </div>  
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem >Edit Profile</DropdownMenuItem>
-                <DropdownMenuItem>Subscription</DropdownMenuItem>
-                <DropdownMenuItem>Logout</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => (window.location.href = "/profile")}
+              className="cursor-pointer">Profile</DropdownMenuItem>
+                {/* <DropdownMenuItem onClick={() => (window.location.href = "/bills")}
+              className="cursor-pointer">Change Plan</DropdownMenuItem> */}
+                <DropdownMenuItem onClick={handleLogout}>Logout</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
         </div>

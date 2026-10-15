@@ -7,19 +7,13 @@ interface StatCardProps {
   icon: React.ReactNode;
   title: string;
   //   value: number | string;
-  lastUpdated: string;
+  lastUpdated?: string;
+  dashboardData: any; // Replace with the actual type of dashboardData
 }
 
-export default function StatCard({ icon, title, lastUpdated }: StatCardProps) {
-  const { dashboardData, loading } = useDashboardData();
-  if (loading || !dashboardData)
-    return (
-      <Card className="flex flex-col py-0 gap-0 h-[251px] justify-center items-center">
-        <Spinner size="small" />
-      </Card>
-    );
+export default function StatCard({ icon, title, lastUpdated, dashboardData }: StatCardProps) {
 
-  const { chartData } = getBarChartData(dashboardData.employeeCount[0]);
+  const { chartData } = getBarChartData(dashboardData);
 
   const matched = chartData.find((item) => item.name === title);
   const value = matched ? matched.value : 0;
@@ -33,11 +27,11 @@ export default function StatCard({ icon, title, lastUpdated }: StatCardProps) {
         </div>
         <div className="font-bold text-4xl">{value}</div>
       </CardContent>
-      <CardFooter className="py-[10px] px-[20px] border-t-2 border-t-[#d9d9d9]">
+      {/* <CardFooter className="py-[10px] px-[20px] border-t-2 border-t-[#d9d9d9]">
         <div className="font-semibold text-sm text-[#acacac]">
           Update: {lastUpdated}
         </div>
-      </CardFooter>
+      </CardFooter> */}
     </Card>
   );
 }

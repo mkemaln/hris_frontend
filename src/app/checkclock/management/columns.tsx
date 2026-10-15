@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { ArrowUpDown } from "lucide-react";
 import { differenceInMinutes } from "date-fns";
-
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ApprovalStatusBadge } from "@/components/ui/approval";
 import { Input } from "@/components/ui/input";
@@ -34,11 +34,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import DownloadButton from "@/components/ui/downloadButton";
 
+import Cookies from "js-cookie";
+import MapboxMapView from "@/components/custom/mapbox/MapBoxView";
+import { Spinner } from "@/components/ui/spinner";
+import { useEdit } from "@/context/EditFormContext";
+
 // This type is used to define the shape of our data.
 // You can use a Zod schema here if you want.
 export type CheckclockOverview = {
   id: number;
+  data_id?: string;
+  submitter: string;
   employeeName: string;
+  employeeNumber: string;
   position: string;
   date?: string | { startDate: string; endDate: string };
   clockIn?: string;
@@ -50,8 +58,16 @@ export type CheckclockOverview = {
   address: string;
   latitude: number;
   longitude: number;
+  startDate?: string;
+  endDate?: string;
+  rejectReason?: string;
+  presentEvidence?: string;
+  presentEvidenceUrl?: string;
+  absentEvidence?: string;
+  absentEvidenceUrl?: string;
+  employeePhoto?: string;
 };
- 
+
 const calculateWorkHours = (
   clockIn: string | undefined,
   clockOut: string | undefined
@@ -80,21 +96,26 @@ const calculateWorkHours = (
 
   // Check if the dates are valid
   if (isNaN(clockInDate.getTime()) || isNaN(clockOutDate.getTime())) {
-    console.error("Invalid date format detected:", { clockIn, clockOut });
+    // console.error("Invalid date format detected:", { clockIn, clockOut });
     return "N/A"; // Return a fallback value for invalid dates
   }
 
   const totalMinutes = differenceInMinutes(clockOutDate, clockInDate);
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
+  const seconds = (totalMinutes % 1) * 60;
 
-  return `${hours}h ${minutes}m`;
+  return `${hours}h ${minutes}m ${seconds.toFixed(0)}s`;
 };
 
 export const columns: ColumnDef<CheckclockOverview>[] = [
   {
-    accessorKey: "id",
+    accessorKey: "employeeNumber",
     header: "Employee ID",
+
+    cell: ({ row }) => (
+      <div className="text-left">{row.getValue("employeeNumber")}</div>
+    ),
   },
   {
     accessorKey: "employeeName",
@@ -163,6 +184,11 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
           {typeof date === "string" ? date : `${date.startDate}`}
         </div>
       );
+    },
+    sortingFn: (rowA, rowB, columnId) => {
+      const dateA = new Date(rowA.getValue(columnId) as string).getTime();
+      const dateB = new Date(rowB.getValue(columnId) as string).getTime();
+      return dateA - dateB; // Ascending order
     },
   },
 
@@ -244,11 +270,15 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
         null
       );
 
+      const [loading, isLoading] = useState(false);
+
       const handleRowSelection = () => {
         const rowData = row.original as CheckclockOverview;
         console.log("Row Data:", rowData);
         setSelectedRow(rowData);
       };
+
+      // console.log('photo', selectedRow?.employeePhoto)
 
       return (
         <div className="w-full flex items-center justify-center">
@@ -270,8 +300,8 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                     <div className="flex px-2 py-4 border-2 border-neutral-300 gap-2 items-center justify-between rounded-sm">
                       <div className="flex gap-2">
                         <Avatar className="w-12 h-12 z-0">
-                          <AvatarImage src="https://github.com/shadcn.png" />
-                          <AvatarFallback>CN</AvatarFallback>
+                          <AvatarImage src={ !selectedRow?.employeePhoto !== null ? selectedRow?.employeePhoto : "https://github.com/shadcn.png"} />
+                          <AvatarFallback>EMP</AvatarFallback>
                         </Avatar>
                         <div className="flex flex-col gap-1">
                           <div
@@ -287,8 +317,8 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                           </span>
                         </div>
                       </div>
-                      {selectedRow?.status === "On Time" ||
-                      selectedRow?.status === "Late" ? (
+                      {selectedRow?.status == "On Time" ||
+                      selectedRow?.status == "Late" ? (
                         <div className="w-fit flex justify-end items-center">
                           <ApprovalStatusBadge
                             status={selectedRow?.status as "On Time" | "Late"}
@@ -322,33 +352,56 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                             <Information
                               label="Start Date"
                               value={
-                                typeof selectedRow?.date === "object" &&
-                                selectedRow?.date?.startDate
+                                selectedRow?.startDate
                                   ? (console.log(
                                       "Start Date:",
-                                      selectedRow.date.startDate
+                                      selectedRow.startDate
                                     ),
-                                    selectedRow.date.startDate)
+                                    selectedRow.startDate)
                                   : "N/A"
                               }
                             ></Information>
                             <Information
                               label="End Date"
                               value={
-                                typeof selectedRow?.date === "object" &&
-                                selectedRow?.date?.endDate
-                                  ? (console.log(selectedRow.date.endDate),
-                                    selectedRow.date.endDate)
+                                selectedRow?.endDate
+                                  ? (console.log(selectedRow.endDate),
+                                    selectedRow.endDate)
                                   : "N/A"
                               }
                             ></Information>
                           </div>
+                          <div className="grid grid-cols-3 gap-3 w-auto">
+                            <Information
+                              label="Submitted by"
+                              value={selectedRow?.submitter}
+                            ></Information>
+                          </div>
                         </div>
+
+                        {selectedRow?.rejectReason !== null ? (
+                          <div className="flex flex-col px-2 py-4 border-2 border-neutral-300 gap-3 rounded-sm ">
+                            <span className="font-semibold">Reject Reason</span>
+                            <div className="flex flex-col gap-6">
+                              <div className="p-4 text-sm text-gray-600 italic">
+                                {selectedRow?.rejectReason}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <></>
+                        )}
+
                         <div className="flex flex-col px-2 py-4 border-2 border-neutral-300 gap-3 rounded-sm">
                           <span className="font-semibold">Proof of Leave</span>
                           <div className="p-3 border border-neutral-200 rounded-sm flex gap-2 justify-between">
-                            <span className="text-base flex items-center w-full h-full">
-                              (nama file)
+                            <span
+                              className="text-base flex items-center w-[200px] h-full truncate"
+                              title={
+                                selectedRow?.absentEvidence ?? "Evidence File"
+                              }
+                            >
+                              {selectedRow?.absentEvidence ?? "Evidence File"}
                             </span>
                             <div className="flex gap-4">
                               <AlertDialog>
@@ -385,7 +438,9 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                     </AlertDialogTitle>
                                     <AlertDialogDescription className="max-h-96 overflow-auto">
                                       <img
-                                        src="/images/proof-of-leave.jpg"
+                                        src={
+                                          selectedRow?.absentEvidenceUrl ?? ""
+                                        }
                                         alt="Proof of Leave"
                                       />
                                     </AlertDialogDescription>
@@ -396,12 +451,12 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                 </AlertDialogContent>
                               </AlertDialog>
 
-                              <DownloadButton
-                              // fileUrl={`/images/bukti-absen-${selectedRow?.employeeName}.jpg`}
+                              {/* <DownloadButton
+                                // fileUrl={`/images/bukti-absen-${selectedRow?.employeeName}.jpg`}
 
                                 fileUrl="/images/proof-of-levave.jpg"
                                 fileName={`proof of leave ${selectedRow?.employeeName}.jpg`}
-                              />
+                              /> */}
                             </div>
                           </div>
                         </div>
@@ -419,7 +474,7 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                 value={
                                   typeof selectedRow?.date === "string"
                                     ? selectedRow?.date
-                                    : `${selectedRow?.date?.startDate} - ${selectedRow?.date?.endDate}`
+                                    : `${selectedRow?.startDate} - ${selectedRow?.endDate}`
                                 }
                               ></Information>
                               <Information
@@ -449,7 +504,7 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                 label="Work Type"
                                 value={selectedRow.workType}
                               ></Information>
-                              {selectedRow?.status !== "Absent" && (
+                              {selectedRow?.status !== "Absent" ? (
                                 <Information
                                   label="Work Hours"
                                   value={calculateWorkHours(
@@ -457,8 +512,21 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                     selectedRow?.clockOut || ""
                                   )}
                                 ></Information>
+                              ) : (
+                                <Information
+                                  label="Submitted by"
+                                  value={selectedRow?.submitter}
+                                ></Information>
                               )}
                             </div>
+                            {selectedRow?.status !== "Absent" && (
+                              <div className="grid grid-cols-3 gap-3 w-auto">
+                                <Information
+                                  label="Submitted by"
+                                  value={selectedRow?.submitter}
+                                ></Information>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -467,7 +535,11 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                             Location Information
                           </span>
                           <div className="flex flex-col gap-6">
-                            <div className="grid grid-cols-2">
+                            <MapboxMapView
+                              latEmployee={selectedRow?.latitude}
+                              longEmployee={selectedRow?.longitude}
+                            ></MapboxMapView>
+                            {/* <div className="grid grid-cols-2">
                               <Information
                                 label="Location"
                                 value={selectedRow.location}
@@ -486,15 +558,15 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                 label="Longitude"
                                 value={selectedRow.longitude}
                               ></Information>
-                            </div>
+                            </div> */}
                           </div>
                         </div>
                       </>
                     )}
                   </div>
 
-                  {selectedRow?.status === "On Time" ||
-                  selectedRow?.status === "Late" ? (
+                  {selectedRow?.status == "On Time" ||
+                  selectedRow?.status == "Late" ? (
                     <SheetFooter>
                       <div className="flex gap-2 flex-wrap">
                         <AlertDialog>
@@ -506,12 +578,32 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
 
                           <AlertDialogContent>
                             <form
-                              onSubmit={(e) => {
+                              onSubmit={async (e) => {
                                 e.preventDefault();
                                 const formData = new FormData(e.currentTarget);
-                                const name = formData.get("name");
-                                console.log("Submitted name:", name);
-                                // Lanjutkan aksi setelah submit...
+                                const rejectReason = formData.get(
+                                  "reason"
+                                ) as string;
+
+                                try {
+                                  const response =
+                                    await updateCheckClockApproval(
+                                      selectedRow?.data_id || "",
+                                      "Rejected",
+                                      isLoading,
+                                      rejectReason
+                                    );
+
+                                  if (response.success) {
+                                  } else {
+                                    console.log(response);
+                                  }
+                                } catch (error) {
+                                  console.error(
+                                    "Error rejecting attendance:",
+                                    error
+                                  );
+                                }
                               }}
                             >
                               <AlertDialogHeader>
@@ -523,6 +615,12 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                   Please enter the reason for rejection.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
+
+                              <input
+                                type="hidden"
+                                name="data_id"
+                                value={selectedRow?.data_id}
+                              />
 
                               <div className="py-4 flex flex-col gap-3">
                                 <Input
@@ -559,7 +657,36 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                       <div className="flex gap-2 flex-wrap">
                         {selectedRow?.approvalStatus === "Pending" ? (
                           <>
-                            <Button>Approve</Button>
+                            {/* <Button>Approve</Button> */}
+                            <Button
+                              disabled={loading}
+                              onClick={async () => {
+                                try {
+                                  const response =
+                                    await updateCheckClockApproval(
+                                      selectedRow?.data_id || "",
+                                      "Approved",
+                                      isLoading
+                                    );
+
+                                  if (response.success) {
+                                  } else {
+                                    console.log(response);
+                                  }
+                                } catch (error) {
+                                  console.error(
+                                    "Error approving attendance:",
+                                    error
+                                  );
+                                }
+                              }}
+                            >
+                              {loading ? (
+                                <Spinner size={"small"}></Spinner>
+                              ) : (
+                                "Approve"
+                              )}
+                            </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="outline">
@@ -569,14 +696,34 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
 
                               <AlertDialogContent>
                                 <form
-                                  onSubmit={(e) => {
+                                  onSubmit={async (e) => {
                                     e.preventDefault();
                                     const formData = new FormData(
                                       e.currentTarget
                                     );
-                                    const name = formData.get("name");
-                                    console.log("Submitted name:", name);
-                                    // Lanjutkan aksi setelah submit...
+                                    const rejectReason = formData.get(
+                                      "reason"
+                                    ) as string;
+
+                                    try {
+                                      const response =
+                                        await updateCheckClockApproval(
+                                          selectedRow?.data_id || "",
+                                          "Rejected",
+                                          isLoading,
+                                          rejectReason
+                                        );
+
+                                      if (response.success) {
+                                      } else {
+                                        console.log(response);
+                                      }
+                                    } catch (error) {
+                                      console.error(
+                                        "Error rejecting attendance:",
+                                        error
+                                      );
+                                    }
                                   }}
                                 >
                                   <AlertDialogHeader>
@@ -604,8 +751,16 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                     >
                                       Cancel
                                     </AlertDialogCancel>
-                                    <Button type="submit" className="w-auto">
-                                      Submit
+                                    <Button
+                                      type="submit"
+                                      className="w-auto"
+                                      disabled={loading}
+                                    >
+                                      {loading ? (
+                                        <Spinner size={"small"}></Spinner>
+                                      ) : (
+                                        "Submit"
+                                      )}
                                     </Button>
                                   </AlertDialogFooter>
                                 </form>
@@ -636,8 +791,8 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                     <div className="flex px-2 py-4 border-2 border-neutral-300 gap-2 items-center justify-between rounded-sm">
                       <div className="flex gap-2">
                         <Avatar className="w-12 h-12 z-0">
-                          <AvatarImage src="https://github.com/shadcn.png" />
-                          <AvatarFallback>CN</AvatarFallback>
+                          <AvatarImage src={ !selectedRow?.employeePhoto !== null ? selectedRow?.employeePhoto : "https://github.com/shadcn.png"} />
+                          <AvatarFallback>EMP</AvatarFallback>
                         </Avatar>
                         <div className="flex flex-col gap-1">
                           <div
@@ -653,8 +808,8 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                           </span>
                         </div>
                       </div>
-                      {selectedRow?.status === "On Time" ||
-                      selectedRow?.status === "Late" ? (
+                      {selectedRow?.status == "On Time" ||
+                      selectedRow?.status == "Late" ? (
                         <div className="w-fit flex justify-end items-center">
                           <ApprovalStatusBadge
                             status={selectedRow?.status as "On Time" | "Late"}
@@ -689,33 +844,56 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                             <Information
                               label="Start Date"
                               value={
-                                typeof selectedRow?.date === "object" &&
-                                selectedRow?.date?.startDate
+                                selectedRow?.startDate
                                   ? (console.log(
                                       "Start Date:",
-                                      selectedRow.date.startDate
+                                      selectedRow.startDate
                                     ),
-                                    selectedRow.date.startDate)
+                                    selectedRow.startDate)
                                   : "N/A"
                               }
                             ></Information>
                             <Information
                               label="End Date"
                               value={
-                                typeof selectedRow?.date === "object" &&
-                                selectedRow?.date?.endDate
-                                  ? (console.log(selectedRow.date.endDate),
-                                    selectedRow.date.endDate)
+                                selectedRow?.endDate
+                                  ? (console.log(selectedRow.endDate),
+                                    selectedRow.endDate)
                                   : "N/A"
                               }
                             ></Information>
                           </div>
+                          <div className="grid grid-cols-3 gap-3 w-auto">
+                            <Information
+                              label="Submitted by"
+                              value={selectedRow?.submitter}
+                            ></Information>
+                          </div>
                         </div>
+
+                        {selectedRow?.rejectReason !== null ? (
+                          <div className="flex flex-col px-2 py-4 border-2 border-neutral-300 gap-3 rounded-sm ">
+                            <span className="font-semibold">Reject Reason</span>
+                            <div className="flex flex-col gap-6">
+                              <div className="p-4 text-sm text-gray-600 italic">
+                                {selectedRow?.rejectReason}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <></>
+                        )}
+
                         <div className="flex flex-col px-2 py-4 border-2 border-neutral-300 gap-3 rounded-sm">
                           <span className="font-semibold">Proof of Leave</span>
                           <div className="p-3 border border-neutral-200 rounded-sm flex gap-2 justify-between">
-                            <span className="text-base flex items-center w-full h-full">
-                              (nama file)
+                            <span
+                              className="text-base flex items-center w-[200px] h-full truncate"
+                              title={
+                                selectedRow?.absentEvidence ?? "Evidence File"
+                              }
+                            >
+                              {selectedRow?.absentEvidence ?? "Evidence File"}
                             </span>
                             <div className="flex gap-4">
                               <AlertDialog>
@@ -752,7 +930,9 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                     </AlertDialogTitle>
                                     <AlertDialogDescription className="max-h-96 overflow-auto">
                                       <img
-                                        src="/images/proof-of-leave.jpg"
+                                        src={
+                                          selectedRow?.absentEvidenceUrl ?? ""
+                                        }
                                         alt="Proof of Leave"
                                       />
                                     </AlertDialogDescription>
@@ -763,12 +943,12 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                 </AlertDialogContent>
                               </AlertDialog>
 
-                             <DownloadButton
-                              // fileUrl={`/images/bukti-absen-${selectedRow?.employeeName}.jpg`}
+                              {/* <DownloadButton
+                                // fileUrl={`/images/bukti-absen-${selectedRow?.employeeName}.jpg`}
 
                                 fileUrl="/images/proof-of-leave.jpg"
                                 fileName={`proof of leave ${selectedRow?.employeeName}.jpg`}
-                              />
+                              /> */}
                             </div>
                           </div>
                         </div>
@@ -786,7 +966,7 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                 value={
                                   typeof selectedRow?.date === "string"
                                     ? selectedRow?.date
-                                    : `${selectedRow?.date?.startDate} - ${selectedRow?.date?.endDate}`
+                                    : `${selectedRow?.startDate} - ${selectedRow?.endDate}`
                                 }
                               ></Information>
                               <Information
@@ -805,14 +985,38 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                 }
                               ></Information>
                             </div>
+                            <div className="grid grid-cols-3 gap-3 w-auto">
+                              <Information
+                                label="Submitted by"
+                                value={selectedRow?.submitter}
+                              ></Information>
+                            </div>
                           </div>
                         </div>
+
+                        {selectedRow?.rejectReason !== null ? (
+                          <div className="flex flex-col px-2 py-4 border-2 border-neutral-300 gap-3 rounded-sm ">
+                            <span className="font-semibold">Reject Reason</span>
+                            <div className="flex flex-col gap-6">
+                              <div className="p-4 text-sm text-gray-600 italic">
+                                {selectedRow?.rejectReason}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <></>
+                        )}
+
                         <div className="flex flex-col px-2 py-4 border-2 border-neutral-300 gap-3 rounded-sm ">
                           <span className="font-semibold">
                             Location Information
                           </span>
                           <div className="flex flex-col gap-6">
-                            <div className="grid grid-cols-2 gap-3 w-auto">
+                            <MapboxMapView
+                              latEmployee={selectedRow?.latitude}
+                              longEmployee={selectedRow?.longitude}
+                            ></MapboxMapView>
+                            {/* <div className="grid grid-cols-2 gap-3 w-auto">
                               <Information
                                 label="Latitude"
                                 value={selectedRow?.latitude}
@@ -821,78 +1025,88 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                 label="Longitude"
                                 value={selectedRow?.longitude}
                               ></Information>
-                            </div>
+                            </div> */}
                           </div>
                         </div>
                         {selectedRow?.status !== "Absent" && (
-
-                        <div className="flex flex-col px-2 py-4 border-2 border-neutral-300 gap-3 rounded-sm">
-                          <span className="font-semibold">
-                            Proof of Attendance
-                          </span>
-                          <div className="p-3 border border-neutral-200 rounded-sm flex gap-2 justify-between">
-                            <span className="text-base flex items-center w-full h-full">
-                              (nama file)
+                          <div className="flex flex-col px-2 py-4 border-2 border-neutral-300 gap-3 rounded-sm">
+                            <span className="font-semibold">
+                              Proof of Attendance
                             </span>
-                            <div className="flex gap-4">
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    className="w-auto"
-                                    size={"icon"}
-                                   
-                                  >
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      width="24"
-                                      height="24"
-                                      strokeWidth="2"
+                            <div className="p-3 border border-neutral-200 rounded-sm flex gap-2 justify-between">
+                              <span
+                                className="text-base flex items-center w-[200px] h-full truncate"
+                                title={
+                                  selectedRow?.presentEvidence ??
+                                  "Evidence File"
+                                }
+                              >
+                                {selectedRow?.presentEvidence ??
+                                  "Evidence File"}
+                              </span>
+                              <div className="flex gap-4">
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      className="w-auto"
+                                      size={"icon"}
                                     >
-                                      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"></path>
-                                      <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6"></path>
-                                    </svg>
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>
-                                      Proof of Attendance
-                                    </AlertDialogTitle>
-                                    <AlertDialogDescription className="max-h-96 overflow-auto">
-                                      <img
-                                        src="/images/proof-of-attendance.jpg"
-                                        alt="Proof of attendance"
-                                      />
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Close</AlertDialogCancel>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                                      <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        width="24"
+                                        height="24"
+                                        strokeWidth="2"
+                                      >
+                                        <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"></path>
+                                        <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6"></path>
+                                      </svg>
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>
+                                        Proof of Attendance
+                                      </AlertDialogTitle>
+                                      <AlertDialogDescription className="max-h-96 overflow-auto">
+                                        <img
+                                          src={
+                                            selectedRow?.presentEvidenceUrl ??
+                                            ""
+                                          }
+                                          alt="Proof of attendance"
+                                        />
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>
+                                        Close
+                                      </AlertDialogCancel>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
 
-                              <DownloadButton
-                              // fileUrl={`/images/bukti-absen-${selectedRow?.employeeName}.jpg`}
+                                {/* <DownloadButton
+                                  // fileUrl={`/images/bukti-absen-${selectedRow?.employeeName}.jpg`}
 
-                                fileUrl="/images/proof-of-attendance.jpg"
-                                fileName={`proof of attendance ${selectedRow?.employeeName}.jpg`}
-                              />
+                                  fileUrl="/images/proof-of-attendance.jpg"
+                                  fileName={`proof of attendance ${selectedRow?.employeeName}.jpg`}
+                                /> */}
+                              </div>
                             </div>
                           </div>
-                        </div>
                         )}
                       </>
                     )}
                   </div>
 
-                  {selectedRow?.status === "On Time" ||
-                  selectedRow?.status === "Late" ? (
+                  {selectedRow?.status == "On Time" ||
+                  selectedRow?.status == "Late" ? (
                     <SheetFooter>
                       <div className="flex gap-2 flex-wrap">
                         <AlertDialog>
@@ -904,12 +1118,32 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
 
                           <AlertDialogContent>
                             <form
-                              onSubmit={(e) => {
+                              onSubmit={async (e) => {
                                 e.preventDefault();
                                 const formData = new FormData(e.currentTarget);
-                                const name = formData.get("name");
-                                console.log("Submitted name:", name);
-                                // Lanjutkan aksi setelah submit...
+                                const rejectReason = formData.get(
+                                  "reason"
+                                ) as string;
+
+                                try {
+                                  const response =
+                                    await updateCheckClockApproval(
+                                      selectedRow?.data_id || "",
+                                      "Rejected",
+                                      isLoading,
+                                      rejectReason
+                                    );
+
+                                  if (response.success) {
+                                  } else {
+                                    console.log(response);
+                                  }
+                                } catch (error) {
+                                  console.error(
+                                    "Error rejecting attendance:",
+                                    error
+                                  );
+                                }
                               }}
                             >
                               <AlertDialogHeader>
@@ -921,6 +1155,11 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                   Please enter the reason for rejection.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
+                              <input
+                                type="hidden"
+                                name="data_id"
+                                value={selectedRow?.data_id}
+                              />
 
                               <div className="py-4 flex flex-col gap-3">
                                 <Input
@@ -937,8 +1176,16 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                 >
                                   Cancel
                                 </AlertDialogCancel>
-                                <Button type="submit" className="w-auto">
-                                  Submit
+                                <Button
+                                  type="submit"
+                                  className="w-auto"
+                                  disabled={loading}
+                                >
+                                  {loading ? (
+                                    <Spinner size={"small"}></Spinner>
+                                  ) : (
+                                    "Submit"
+                                  )}
                                 </Button>
                               </AlertDialogFooter>
                             </form>
@@ -957,7 +1204,35 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                       <div className="flex gap-2 flex-wrap">
                         {selectedRow?.approvalStatus === "Pending" ? (
                           <>
-                            <Button>Approve</Button>
+                            <Button
+                              disabled={loading}
+                              onClick={async () => {
+                                try {
+                                  const response =
+                                    await updateCheckClockApproval(
+                                      selectedRow?.data_id || "",
+                                      "Approved",
+                                      isLoading
+                                    );
+
+                                  if (response.success) {
+                                  } else {
+                                    console.log(response);
+                                  }
+                                } catch (error) {
+                                  console.error(
+                                    "Error approving attendance:",
+                                    error
+                                  );
+                                }
+                              }}
+                            >
+                              {loading ? (
+                                <Spinner size={"small"}></Spinner>
+                              ) : (
+                                "Approve"
+                              )}
+                            </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="outline">
@@ -967,14 +1242,34 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
 
                               <AlertDialogContent>
                                 <form
-                                  onSubmit={(e) => {
+                                  onSubmit={async (e) => {
                                     e.preventDefault();
                                     const formData = new FormData(
                                       e.currentTarget
                                     );
-                                    const name = formData.get("name");
-                                    console.log("Submitted name:", name);
-                                    // Lanjutkan aksi setelah submit...
+                                    const rejectReason = formData.get(
+                                      "reason"
+                                    ) as string;
+
+                                    try {
+                                      const response =
+                                        await updateCheckClockApproval(
+                                          selectedRow?.data_id || "",
+                                          "Rejected",
+                                          isLoading,
+                                          rejectReason
+                                        );
+
+                                      if (response.success) {
+                                      } else {
+                                        console.log(response);
+                                      }
+                                    } catch (error) {
+                                      console.error(
+                                        "Error rejecting attendance:",
+                                        error
+                                      );
+                                    }
                                   }}
                                 >
                                   <AlertDialogHeader>
@@ -986,6 +1281,12 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
                                       Please enter the reason for rejection.
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
+
+                                  <input
+                                    type="hidden"
+                                    name="data_id"
+                                    value={selectedRow?.data_id}
+                                  />
 
                                   <div className="py-4 flex flex-col gap-3">
                                     <Input
@@ -1029,3 +1330,54 @@ export const columns: ColumnDef<CheckclockOverview>[] = [
     },
   },
 ];
+
+export async function updateCheckClockApproval(
+  data_id: string,
+  status: "Approved" | "Rejected",
+  isLoading: (loading: boolean) => void,
+  rejectReason?: string
+) {
+  try {
+    isLoading(true);
+    console.log(data_id, status, rejectReason);
+    const userCookie = Cookies.get("token");
+    if (!userCookie) {
+      throw new Error("No authentication token found");
+    }
+
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/check-clock-approval/${data_id}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userCookie}`,
+        },
+        body: JSON.stringify({
+          status_approval: status,
+          reject_reason: rejectReason || null,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      // toast.error(data.errors);
+      console.error(data.errors)
+    }
+
+    window.location.reload();
+
+    // toast.success(data.message);
+    return { success: true, data };
+  } catch (error: any) {
+    return {
+      success: false,
+      error:
+        error.message || "An error occurred while updating approval status",
+    };
+  } finally {
+    isLoading(false);
+  }
+}

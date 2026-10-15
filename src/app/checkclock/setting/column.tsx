@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { CheckclockSettingForm } from "@/types/cksettingForm";
 import { ColumnDef } from "@tanstack/react-table";
 import React from "react";
 
@@ -18,7 +19,7 @@ export type checkclockSetting = {
   radius?: number;
 };
 
-export const wfoColumns: ColumnDef<checkclockSetting>[] = [
+export const wfoColumns: ColumnDef<CheckclockSettingForm>[] = [
   { accessorKey: "no", header: ({ column }) => {
       return <div className="text-center">No.</div>;
     }, cell: ({ row }) =>  {return <div className="text-center">{row.index + 1}</div>;} },
@@ -29,12 +30,30 @@ export const wfoColumns: ColumnDef<checkclockSetting>[] = [
       return <div className="text-left">{row.getValue("day")}</div>;
     }, },
   {
+    accessorKey: "minClockIn",
+    header: ({ column }) => {
+      return <div className="text-center">Min Clock In</div>;
+    },
+    cell: ({ row }) => {
+      return <div className="text-center">{row.getValue("minClockIn")}</div>;
+    },
+  },
+  {
     accessorKey: "clockIn",
     header: ({ column }) => {
       return <div className="text-center">Clock In</div>;
     },
     cell: ({ row }) => {
       return <div className="text-center">{row.getValue("clockIn")}</div>;
+    },
+  },
+  {
+    accessorKey: "maxClockIn",
+    header: ({ column }) => {
+      return <div className="text-center">Max Clock In</div>;
+    },
+    cell: ({ row }) => {
+      return <div className="text-center">{row.getValue("maxClockIn")}</div>;
     },
   },
   {
@@ -47,30 +66,12 @@ export const wfoColumns: ColumnDef<checkclockSetting>[] = [
     },
   },
   {
-    accessorKey: "latidude",
+    accessorKey: "maxClockOut",
     header: ({ column }) => {
-      return <div className="text-center">Latitude</div>;
+      return <div className="text-center">Max Clock Out</div>;
     },
     cell: ({ row }) => {
-      return <div className="text-center">{row.getValue("latidude")}</div>;
-    },
-  },
-  {
-    accessorKey: "longitude",
-    header: ({ column }) => {
-      return <div className="text-center">Longitude</div>;
-    },
-    cell: ({ row }) => {
-      return <div className="text-center">{row.getValue("longitude")}</div>;
-    },
-  },
-  {
-    accessorKey: "radius",
-    header: ({ column }) => {
-      return <div className="text-center">Radius (m)</div>;
-    },
-    cell: ({ row }) => {
-      return <div className="text-center">{row.getValue("radius")}</div>;
+      return <div className="text-center">{row.getValue("maxClockOut")}</div>;
     },
   },
   {
@@ -82,7 +83,7 @@ export const wfoColumns: ColumnDef<checkclockSetting>[] = [
      
       return (
         <div className="flex justify-center w-full items-center">
-          <div className="w-full flex items-center justify-center">
+          <div className="w-full flex items-center justify-center" id="edit-coci">
                 <Button variant={"outline"} size={"sm"}>
                   Edit
                 </Button>
@@ -94,7 +95,7 @@ export const wfoColumns: ColumnDef<checkclockSetting>[] = [
   },
 ];
 
-export const wfaColumns: ColumnDef<checkclockSetting>[] = [
+export const wfaColumns: ColumnDef<CheckclockSettingForm>[] = [
   { accessorKey: "no", header: ({ column }) => {
       return <div className="text-center">No.</div>;
     }, cell: ({ row }) =>  {return <div className="text-center">{row.index + 1}</div>;} },
@@ -105,6 +106,15 @@ export const wfaColumns: ColumnDef<checkclockSetting>[] = [
       return <div className="text-left">{row.getValue("day")}</div>;
     }, },
   {
+    accessorKey: "minClockIn",
+    header: ({ column }) => {
+      return <div className="text-center">Min Clock In</div>;
+    },
+    cell: ({ row }) => {
+      return <div className="text-center">{row.getValue("minClockIn")}</div>;
+    },
+  },
+  {
     accessorKey: "clockIn",
     header: ({ column }) => {
       return <div className="text-center">Clock In</div>;
@@ -114,12 +124,12 @@ export const wfaColumns: ColumnDef<checkclockSetting>[] = [
     },
   },
   {
-    accessorKey: "clockOut",
+    accessorKey: "maxClockIn",
     header: ({ column }) => {
-      return <div className="text-center">Clock Out</div>;
+      return <div className="text-center">Max Clock In</div>;
     },
     cell: ({ row }) => {
-      return <div className="text-center">{row.getValue("clockOut")}</div>;
+      return <div className="text-center">{row.getValue("maxClockIn")}</div>;
     },
   },
   {

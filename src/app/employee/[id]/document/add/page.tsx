@@ -30,7 +30,8 @@
     import dynamic from "next/dynamic";
     import { useRouter } from "next/navigation";
     import { Spinner } from "@/components/ui/spinner";
-
+    import Cookies from "js-cookie";
+import { toast, Toaster } from "sonner";
     export default function AddDocument() {
         const [selectedTemplate, setSelectedTemplate] = useState("")
         const [mode, setMode] = useState("upload")
@@ -93,25 +94,65 @@
                 if (mode === "template" && quillRef.current) {
                     const blob = await quillRef.current.getPdfBlob();
                     if (!blob) throw new Error("Gagal membuat PDF");
-
+                    
                     formData.delete("document"); // pastikan tidak ada file lain
                     formData.append("document", new File([blob], `document${timestamp()}.pdf`, { type: "application/pdf" }));
                 }
+                formData.append("employee_id", employeeId);
 
-                const response = await fetch("https://httpbin.org/post", {
+                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/documents`, {
                     method: "POST",
+                     headers: {
+                        "Authorization": `Bearer ${Cookies.get("token")}`,
+                        // Jangan tambahkan Content-Type manual di sini!
+                    },
                     body: formData,
                 });
 
-                if (!response.ok) throw new Error("Gagal submit");
-
+                if (!response.ok) {
+                    const responseData = await response.json();
+                    throw responseData;
+                };
+                toast.success('Document created successfully')
                 setSuccess(true);
                 // setTimeout(() => {
                 //     router.push(`/employee/${employeeId}`); // redirect setelah sukses
                 // }, 1500);
             } catch (err) {
-                console.error(err);
                 setError(true);
+                let message = "Unknown error occurred";
+                let messagesToShow: string[] = [];
+
+                if (
+                err &&
+                typeof err === "object" &&
+                "message" in err &&
+                typeof (err as any).message === "string"
+                ) {
+                const backendError = err as { message: string; errors?: Record<string, string[]> };
+
+                if (backendError.message.toLowerCase().includes("failed to fetch")) {
+                    message = "Unknown error occurred";
+                } else {
+                    message = backendError.message;
+                }
+
+                messagesToShow = backendError.errors
+                    ? Object.values(backendError.errors).flat()
+                    : [message];
+                } else {
+                messagesToShow = [message]
+                }
+
+                toast.error(
+                    <>
+                        <p className="text-red-700 font-bold">Error</p>
+                        {messagesToShow.map((msg, idx) => (
+                        <div key={idx} className="text-red-700">• {msg}</div>
+                        ))}
+                    </>,
+                    { duration: 30000 }
+                );
             } finally {
                 setLoading(false);
             }
@@ -119,6 +160,7 @@
 
         return (
             <Sidebar title="Add Document">
+                <Toaster position="bottom-right" expand={true} richColors closeButton></Toaster>
                 <div className="flex flex-col">
                     <Card className="flex-1 rounded-[15px] border border-black/15 bg-white shadow-[0px_2px_2px_0px_rgba(0,0,0,0.25)] overflow-hidden p-6">
                         <div className="flex flex-col gap-[6px]">
@@ -171,9 +213,9 @@
                         
                         {/* <form  ref={formRef} action="https://httpbin.org/post" method="POST" target="_blank" encType="multipart/form-data"  onSubmit={handleInsertPdfBeforeSubmit}> */}
                         <form
-                        ref={formRef}
-                        onSubmit={handleSubmitFormManual}
-                        encType="multipart/form-data"
+                            ref={formRef}
+                            onSubmit={handleSubmitFormManual}
+                            encType="multipart/form-data"
                         >
 
                             <div className="flex gap-6 justify-between flex-col lg:flex-row">
@@ -280,7 +322,7 @@
                                
                             </div>
                                  <Dialog
-                                    open={success || error}
+                                    open={success}
                                     onOpenChange={(open) => {
                                         if (!open) {
                                         setSuccess(false);
@@ -301,8 +343,7 @@
                                         <DialogTitle>{success ? "Success!" : "Error"}</DialogTitle>
                                         </DialogHeader>
                                         <div className="mt-2">
-                                        {success && <p className="text-green-700">Document submitted successfully!</p>}
-                                        {error && <p className="text-red-600">There was an error submitting the form.</p>}
+                                        {success && <p >Add another document?</p>}
                                         </div>
                                         <DialogFooter className="mt-4 flex gap-2 justify-end">
                                         {success && (
@@ -311,13 +352,9 @@
                                                 variant="outline"
                                                 className="max-w-[180px] whitespace-nowrap"
                                                 onClick={() => {
-                                                // Reset form & close popup
-                                                formRef.current?.reset();
-                                                setSuccess(false);
-                                                setSelectedTemplate("");
-                                                setMode("upload");
-
-                                                setPreventRedirect(true); // cegah redirect saat dialog close
+                                      
+                                                window.location.reload();
+                                                setPreventRedirect(true);
                                                 }}
                                             >
                                                 Add Another Document
@@ -326,11 +363,6 @@
                                                 <Button variant="default" className="max-w-[180px] whitespace-nowrap">Close</Button>
                                             </DialogClose>
                                             </div>
-                                        )}
-                                        {error && (
-                                            <DialogClose asChild>
-                                            <Button variant="default" className="max-w-[180px] whitespace-nowrap">OK</Button>
-                                            </DialogClose>
                                         )}
                                         </DialogFooter>
                                     </DialogContent>

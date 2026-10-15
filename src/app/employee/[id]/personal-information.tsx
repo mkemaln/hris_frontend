@@ -12,6 +12,7 @@ import {
     DialogTitle,
     DialogDescription,
     DialogClose,
+    DialogFooter,
     } from "@/components/ui/dialog"
 import {
     Select,
@@ -20,13 +21,119 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-const PersonalInformation = () => {
+import { EmployeeResponse } from "@/types/employee";
+import { useEffect, useState } from "react";
+import { Spinner } from "@/components/ui/spinner";
+import Cookies from "js-cookie";
+import { toast } from "sonner";
+
+type Props = {
+    employeeData?: EmployeeResponse;
+    onUpdate: () => void;
+};
+
+const PersonalInformation = ({ employeeData, onUpdate }: Props) => {
+    const [gender, setGender] = useState("");
+    const [education, setEducation] = useState("");
+    const [bloodType, setBloodType] = useState("");
+    const [maritalStatus, setMaritalStatus] = useState("");
+    const [religion, setReligion] = useState("");
+
+    useEffect(() => {
+    if (employeeData?.employee) {
+        if (employeeData.employee.gender) setGender(employeeData.employee.gender);
+        if (employeeData.employee.education) setEducation(employeeData.employee.education);
+        if (employeeData.employee.blood_type) setBloodType(employeeData.employee.blood_type);
+        if (employeeData.employee.marital_status) setMaritalStatus(employeeData.employee.marital_status);
+        if (employeeData.employee.religion) setReligion(employeeData.employee.religion);
+    }
+    }, [employeeData?.employee]);
+    const [loading, setLoading] = useState(false);
+    const [success, setSuccess] = useState(false);
+    const [error, setError] = useState(false);
+
+    
+    const handleSubmitForm = async () => {
+        setLoading(true);
+        setError(false);
+        setSuccess(false);
+
+        try {
+            const form = document.getElementById("employeeForm") as HTMLFormElement;
+            const formData = new FormData(form);
+
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/employees/${employeeData?.employee.employee_id}?_method=PATCH`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${Cookies.get("token")}`,
+                        // Jangan tambahkan Content-Type manual di sini!
+                    },
+                    body: formData,
+            });
+
+            const responseData = await response.json();
+
+            if (!response.ok) {
+                throw responseData; 
+            }
+            toast.success('Data updated successfully')
+        
+            setSuccess(true);
+            handleOkClick()
+        } catch (err) {
+            setError(true);
+            let message = "Unknown error occurred";
+            let messagesToShow: string[] = [];
+
+            if (
+            err &&
+            typeof err === "object" &&
+            "message" in err &&
+            typeof (err as any).message === "string"
+            ) {
+            const backendError = err as { message: string; errors?: Record<string, string[]> };
+
+            if (backendError.message.toLowerCase().includes("failed to fetch")) {
+                message = "Unknown error occurred";
+            } else {
+                message = backendError.message;
+            }
+
+            messagesToShow = backendError.errors
+                ? Object.values(backendError.errors).flat()
+                : [message];
+            } else {
+            messagesToShow = [message]
+            }
+
+            toast.error(
+            <>
+                <span className="text-red-700 font-bold">Error</span>
+                {messagesToShow.map((msg, idx) => (
+                <div key={idx} className="text-red-700">• {msg}</div>
+                ))}
+            </>,
+            { duration: 30000 }
+            );
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const [isDialogAOpen, setDialogAOpen] = useState(false);
+    const handleOkClick = async () => {
+        onUpdate(); // panggil fetchData() di parent
+        setDialogAOpen(false)
+        setSuccess(false); // reset state jika perlu
+
+    };
     return (
-        <Card className="flex-1 h-full ml-[20px] gap-[15px] rounded-[15px] border border-black/15 bg-white shadow-[0px_2px_2px_0px_rgba(0,0,0,0.25)] overflow-hidden">
+        <Card className="flex-1 h-full ml-[20px] gap-[15px] rounded-[15px] border border-black/15 bg-white shadow-[0px_2px_2px_0px_rgba(0,0,0,0.25)] overflow-hidden" id="info-employee">
             <div className="flex mx-[20px] justify-between">
                 <p className="justify-center text-lg font-medium whitespace-nowrap">Personal Information</p>
                 <div>
-                    <Dialog>
+                    {employeeData?.employee.employee_status === "Active" && (
+                    <Dialog open={isDialogAOpen} onOpenChange={setDialogAOpen}>
                         <DialogTrigger asChild>
                             <Button variant="ghost" size="icon">
                                 <svg className="!w-[24px] !h-[24px]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -44,7 +151,11 @@ const PersonalInformation = () => {
                                 </DialogDescription>
                             </DialogHeader>
                             <div>
-                                <form action="https://httpbin.org/post" method="POST" target="_blank" encType="multipart/form-data">
+                                {/* <form action="https://httpbin.org/post" method="POST" target="_blank" encType="multipart/form-data"> */}
+                                <form id="employeeForm" onSubmit={(e) => {
+                                    e.preventDefault(); // mencegah reload halaman
+                                    handleSubmitForm();
+                                }}>
                                     <div className="flex flex-col gap-[15px] mt-[15px]">
                                         <div className="flex gap-[10px]">
                                             <div className="flex flex-col flex-1 gap-[8px]">
@@ -54,6 +165,7 @@ const PersonalInformation = () => {
                                                     id="first_name"
                                                     name="first_name"
                                                     placeholder="Enter employee first name"
+                                                    defaultValue={employeeData?.employee.first_name??""}
                                                 />
                                             </div>
                                             <div className="flex flex-col flex-1 gap-[8px]">
@@ -63,6 +175,7 @@ const PersonalInformation = () => {
                                                     id="last_name"
                                                     name="last_name"
                                                     placeholder="Enter employee last name"
+                                                    defaultValue={employeeData?.employee.last_name??""}
                                                 />
                                             </div>
                                         </div>
@@ -74,19 +187,22 @@ const PersonalInformation = () => {
                                                     id="nik"
                                                     name="nik"
                                                     placeholder="Enter employee NIK"
+                                                    defaultValue={employeeData?.employee.nik??""}
+                                                    className="no-spinner"
                                                 />
                                             </div>
-                                                <div className="flex flex-col flex-1 gap-[8px]">
+                                            <div className="flex flex-col flex-1 gap-[8px]">
                                                 <Label htmlFor="gender">Gender</Label>
-                                                <Select name="gender">
+                                                <Select value={gender} onValueChange={setGender}>
                                                     <SelectTrigger className="w-full !h-[46px] !border !border-neutral-300 !text-neutral-300">
                                                         <SelectValue placeholder="Select employee gender" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="male">Male</SelectItem>
-                                                        <SelectItem value="female">Female</SelectItem>
+                                                        <SelectItem value="Male">Male</SelectItem>
+                                                        <SelectItem value="Female">Female</SelectItem>
                                                     </SelectContent>
                                                 </Select>
+                                                <input type="hidden" name="gender" value={gender} />
                                             </div>
                                         </div>
                                         <div className="flex gap-[10px]">
@@ -97,6 +213,7 @@ const PersonalInformation = () => {
                                                     id="birth_place"
                                                     name="birth_place"
                                                     placeholder="Enter employee birth place"
+                                                    defaultValue={employeeData?.employee.birth_place??""}
                                                 />
                                             </div>
                                             <div className="flex flex-col flex-1 gap-[8px]">
@@ -106,6 +223,7 @@ const PersonalInformation = () => {
                                                     id="birth_date"
                                                     name="birth_date"
                                                     placeholder="Enter employee birth date"
+                                                    defaultValue={employeeData?.employee.birth_date??""}
                                                 />
                                             </div>
                                         
@@ -113,68 +231,76 @@ const PersonalInformation = () => {
                                         <div className="flex gap-[10px]">
                                                 <div className="flex flex-col flex-1 gap-[8px]">
                                                 <Label htmlFor="Education">Education</Label>
-                                                <Select name="education">
+                                                <Select value={education} onValueChange={setEducation}>
                                                     <SelectTrigger className="w-full !h-[46px] !border !border-neutral-300 !text-neutral-300">
                                                         <SelectValue placeholder="Select employee education" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="sd">SD</SelectItem>
-                                                        <SelectItem value="smp">SMP</SelectItem>
-                                                        <SelectItem value="sma">SMA</SelectItem>
-                                                        <SelectItem value="d3">D3</SelectItem>
-                                                        <SelectItem value="s1">S1</SelectItem>
-                                                        <SelectItem value="s2">S2</SelectItem>
-                                                        <SelectItem value="s3">S3</SelectItem>
+                                                        <SelectItem value="SD">SD</SelectItem>
+                                                        <SelectItem value="SMP">SMP</SelectItem>
+                                                        <SelectItem value="SMA">SMA</SelectItem>
+                                                        <SelectItem value="D1">D1</SelectItem>
+                                                        <SelectItem value="D2">D2</SelectItem>
+                                                        <SelectItem value="D3">D3</SelectItem>
+                                                        <SelectItem value="D4">D4</SelectItem>
+                                                        <SelectItem value="S1">S1</SelectItem>
+                                                        <SelectItem value="S2">S2</SelectItem>
+                                                        <SelectItem value="S3">S3</SelectItem>
+                                                        <SelectItem value="Other">Other</SelectItem>
                                                     </SelectContent>
                                                 </Select>
+                                                <input type="hidden" name="education" value={education} />
                                             </div>
                                             <div className="flex flex-col flex-1 gap-[8px]">
                                                 <Label htmlFor="blood-type">Blood Type</Label>
-                                                <Select name="blood_type">
+                                                <Select value={bloodType} onValueChange={setBloodType}>
                                                     <SelectTrigger className="w-full !h-[46px] !border !border-neutral-300 !text-neutral-300">
                                                     <SelectValue placeholder="Select employee blood type" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                    <SelectItem value="a">A</SelectItem>
-                                                    <SelectItem value="b">B</SelectItem>
-                                                    <SelectItem value="ab">AB</SelectItem>
-                                                    <SelectItem value="o">O</SelectItem>
-                                                    <SelectItem value="unknown">Unknown</SelectItem>
+                                                        <SelectItem value="A">A</SelectItem>
+                                                        <SelectItem value="B">B</SelectItem>
+                                                        <SelectItem value="AB">AB</SelectItem>
+                                                        <SelectItem value="O">O</SelectItem>
+                                                        <SelectItem value="unknown">Unknown</SelectItem>
                                                     </SelectContent>
                                                 </Select>
+                                                <input type="hidden" name="blood_type" value={bloodType}/>
                                             </div>
                                         </div>
                                         <div className="flex gap-[10px]">
                                             <div className="flex flex-col flex-1 gap-[8px]">
                                                 <Label htmlFor="maritial-_status">Maritial Status</Label>
-                                                <Select name="maritial_status">
+                                                <Select value={maritalStatus} onValueChange={setMaritalStatus}>
                                                     <SelectTrigger className="w-full !h-[46px] !border !border-neutral-300 !text-neutral-300">
                                                         <SelectValue placeholder="Select employee maritial status" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="single">Single</SelectItem>
-                                                        <SelectItem value="married">Married</SelectItem>
-                                                        <SelectItem value="divorced">Divorced</SelectItem>
-                                                        <SelectItem value="widowed">Widowed</SelectItem>
+                                                        <SelectItem value="Single">Single</SelectItem>
+                                                        <SelectItem value="Married">Married</SelectItem>
+                                                        <SelectItem value="Divorced">Divorced</SelectItem>
+                                                        <SelectItem value="Widowed">Widowed</SelectItem>
                                                     </SelectContent>
                                                 </Select>
+                                                <input type="hidden" name="marital_status" value={maritalStatus} />
                                             </div>
                                             <div className="flex flex-col flex-1 gap-[8px]">
                                                 <Label htmlFor="religion">Religion</Label>
-                                                <Select name="religion">
+                                                <Select value={religion} onValueChange={setReligion}>
                                                     <SelectTrigger className="w-full !h-[46px] !border !border-neutral-300 !text-neutral-300">
                                                     <SelectValue placeholder="Select employee religion" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                    <SelectItem value="islam">Islam</SelectItem>
-                                                    <SelectItem value="protestant">Christian Protestant</SelectItem>
-                                                    <SelectItem value="catholic">Catholic</SelectItem>
-                                                    <SelectItem value="hindu">Hindu</SelectItem>
-                                                    <SelectItem value="buddha">Buddha</SelectItem>
-                                                    <SelectItem value="confucianism">Confucianism</SelectItem>
-                                                    <SelectItem value="other">Other</SelectItem>
+                                                    <SelectItem value="Islam">Islam</SelectItem>
+                                                    <SelectItem value="Christian">Christian</SelectItem>
+                                                    <SelectItem value="Catholic">Catholic</SelectItem>
+                                                    <SelectItem value="Hindu">Hindu</SelectItem>
+                                                    <SelectItem value="Buddha">Buddha</SelectItem>
+                                                    <SelectItem value="Confucianism">Confucianism</SelectItem>
+                                                    <SelectItem value="Other">Other</SelectItem>
                                                     </SelectContent>
                                                 </Select>
+                                                <input type="hidden" name="religion" value={religion} />
                                             </div>
                                         </div>
                                         <div className="flex gap-[10px]">
@@ -185,6 +311,7 @@ const PersonalInformation = () => {
                                                     id="citizenship"
                                                     name="citizenship"
                                                     placeholder="Enter employee citizenship"
+                                                    defaultValue={employeeData?.employee.citizenship??""}
                                                 />
                                             </div>
                                             <div className="flex flex-col flex-1 gap-[8px]">
@@ -194,6 +321,7 @@ const PersonalInformation = () => {
                                                     id="address"
                                                     name="address"
                                                     placeholder="Enter employee address"
+                                                    defaultValue={employeeData?.employee.address??""}
                                                 />
                                             </div>
                                         </div>
@@ -207,77 +335,85 @@ const PersonalInformation = () => {
                                                 </DialogClose>
                                             </div>
                                             
-                                            <Button className="w-[80px]" variant="default" type="submit">
+                                            <Button className="w-[80px] h-[40px]" variant="default" type="submit" disabled={loading}>
+                                            {!loading ? (
+                                                <>
                                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H16L21 8V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                                <path d="M17 21V13H7V21" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                                <path d="M7 3V8H15" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    <path d="M19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H16L21 8V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    <path d="M17 21V13H7V21" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    <path d="M7 3V8H15" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                                 </svg>
-                                                Save
+                                                <span className="ml-1">Save</span>
+                                                </>
+                                            ) : (
+                                                <Spinner size="small" />
+                                            )}
                                             </Button>
+                                          
                                         </div>
                                     </div>
                                 </form>
                             </div>
                         </DialogContent>
                     </Dialog>
+                    )}
                 </div>
                 
             </div>
             <div className="flex mx-[20px] gap-[10px]">
                 <div className="flex flex-col flex-1 gap-[8px] overflow-hidden">
                     <Label>Full Name</Label>
-                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">John Marston</span> 
+                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">{[employeeData?.employee.first_name, employeeData?.employee.last_name].filter(Boolean).join(" ") || "-"}</span>
                 </div>
                 <div className="flex flex-col flex-1 gap-[8px] overflow-hidden">
                     <Label>NIK</Label>
-                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">3500000000000000</span> 
+                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">{employeeData?.employee.nik ?? "-"}</span> 
                 </div>
             </div>
             <div className="flex mx-[20px] gap-[10px]">
                 <div className="flex flex-col flex-1 gap-[8px] overflow-hidden">
                     <Label>Gender</Label>
-                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">Male</span> 
+                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">{employeeData?.employee.gender ?? "-"}</span> 
                 </div>
                 <div className="flex flex-col flex-1 gap-[8px] overflow-hidden">
                     <Label>Education</Label>
-                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">S1</span> 
+                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">{employeeData?.employee.education ?? "-"}</span> 
                 </div>
             </div>
             <div className="flex mx-[20px] gap-[10px]">
                 <div className="flex flex-col flex-1 gap-[8px] overflow-hidden">
                     <Label>Birth Place</Label>
-                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">Malang</span> 
+                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">{employeeData?.employee.birth_place ?? "-"}</span> 
                 </div>
                 <div className="flex flex-col flex-1 gap-[8px] overflow-hidden">
                     <Label>Birth Date</Label>
-                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">1 May 1989</span> 
+                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">{employeeData?.employee.birth_date ?? "-"}</span> 
                 </div>
             </div>
             <div className="flex mx-[20px] gap-[10px]">
                 <div className="flex flex-col flex-1 gap-[8px] overflow-hidden">
                     <Label>Citizenship</Label>
-                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">Malang</span> 
+                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">{employeeData?.employee.citizenship ?? "-"}</span> 
                 </div>
                 <div className="flex flex-col flex-1 gap-[8px] overflow-hidden">
                     <Label>Marital Status</Label>
-                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">Single</span> 
+                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">{employeeData?.employee.marital_status ?? "-"}</span> 
                 </div>
             </div>
             <div className="flex mx-[20px] gap-[10px]">
                 <div className="flex flex-col flex-1 gap-[8px] overflow-hidden">
                     <Label>Religion</Label>
-                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">Islam</span> 
+                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">{employeeData?.employee.religion ?? "-"}</span> 
                 </div>
                 <div className="flex flex-col flex-1 gap-[8px] overflow-hidden">
                     <Label>Blood Type</Label>
-                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">A</span> 
+                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">{employeeData?.employee.blood_type ?? "-"}</span> 
                 </div>
             </div>
             <div className="flex mx-[20px] gap-[10px]">
                 <div className="flex flex-col flex-1 gap-[8px] overflow-hidden">
                     <Label>Address</Label>
-                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">Jl. Soekarno Hatta No.9, Jatimulyo, Kec. Lowokwaru, Kota Malang, Jawa Timur 65141</span> 
+                    <span className="text-gray-600 border border-neutral-300 rounded-md px-4 py-3">{employeeData?.employee.address ?? "-"}</span> 
                 </div>
             </div>
 
